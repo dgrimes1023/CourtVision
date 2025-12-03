@@ -1,0 +1,298 @@
+// CourtVision ERD - 20 Tables
+// Use this at dbdiagram.io to visualize the database schema
+// Checkpoint 2 - NBA Analytics Application
+
+// ==========================================
+// LAYER A: NBA_RAW (Imported Kaggle Dataset)
+// ==========================================
+
+Table players_raw {
+  id integer [primary key, increment]
+  player_name varchar(255) [not null]
+  birth_date date
+  height_inches integer
+  weight_lbs integer
+  college varchar(255)
+  country varchar(100)
+  draft_year integer
+  draft_round integer
+  draft_number integer
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table teams_raw {
+  id integer [primary key, increment]
+  team_name varchar(255) [not null]
+  abbreviation varchar(10) [unique, not null]
+  city varchar(100)
+  arena varchar(255)
+  year_founded integer
+  owner varchar(255)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table seasons_raw {
+  id integer [primary key, increment]
+  season_year varchar(20) [unique, not null, note: 'e.g., 2023-24']
+  start_date date
+  end_date date
+  champion_team varchar(100)
+  mvp_player varchar(255)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+// ==========================================
+// LAYER B: CORE (Main Application Objects)
+// ==========================================
+
+Table player {
+  id integer [primary key, increment]
+  player_name varchar(255) [not null]
+  birth_date date
+  height_inches integer [note: 'Must be 0-100']
+  weight_lbs integer [note: 'Must be 0-500']
+  position varchar(10) [note: 'PG, SG, SF, PF, C']
+  jersey_number integer
+  is_active boolean [default: true]
+  raw_player_id integer [ref: > players_raw.id]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table team {
+  id integer [primary key, increment]
+  team_name varchar(255) [not null]
+  abbreviation varchar(10) [unique, not null]
+  city varchar(100)
+  conference varchar(20) [note: 'Eastern, Western']
+  division varchar(50) [note: 'Atlantic, Central, Southeast, etc.']
+  is_active boolean [default: true]
+  raw_team_id integer [ref: > teams_raw.id]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table season {
+  id integer [primary key, increment]
+  season_year varchar(20) [unique, not null]
+  start_date date [not null]
+  end_date date [not null]
+  is_current boolean [default: false]
+  raw_season_id integer [ref: > seasons_raw.id]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table player_season_stats {
+  id integer [primary key, increment]
+  player_id integer [not null, ref: > player.id]
+  season_id integer [not null, ref: > season.id]
+  team_id integer [ref: > team.id]
+  games_played integer [default: 0]
+  minutes_played decimal(10,2) [default: 0]
+  points decimal(10,2) [default: 0]
+  rebounds decimal(10,2) [default: 0]
+  assists decimal(10,2) [default: 0]
+  steals decimal(10,2) [default: 0]
+  blocks decimal(10,2) [default: 0]
+  turnovers decimal(10,2) [default: 0]
+  field_goals_made integer [default: 0]
+  field_goals_attempted integer [default: 0]
+  three_pointers_made integer [default: 0]
+  three_pointers_attempted integer [default: 0]
+  free_throws_made integer [default: 0]
+  free_throws_attempted integer [default: 0]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (player_id, season_id) [unique]
+  }
+}
+
+Table team_season_stats {
+  id integer [primary key, increment]
+  team_id integer [not null, ref: > team.id]
+  season_id integer [not null, ref: > season.id]
+  wins integer [default: 0]
+  losses integer [default: 0]
+  win_percentage decimal(5,3)
+  points_per_game decimal(10,2)
+  points_allowed_per_game decimal(10,2)
+  offensive_rating decimal(10,2)
+  defensive_rating decimal(10,2)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (team_id, season_id) [unique]
+  }
+}
+
+Table advanced_metrics {
+  id integer [primary key, increment]
+  player_id integer [not null, ref: > player.id]
+  season_id integer [not null, ref: > season.id]
+  player_efficiency_rating decimal(10,2) [note: 'PER']
+  true_shooting_percentage decimal(5,3) [note: 'TS%']
+  usage_rate decimal(5,3)
+  offensive_rating decimal(10,2)
+  defensive_rating decimal(10,2)
+  win_shares decimal(10,2)
+  box_plus_minus decimal(10,2) [note: 'BPM']
+  value_over_replacement decimal(10,2) [note: 'VORP']
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (player_id, season_id) [unique]
+  }
+}
+
+Table shooting_zones {
+  id integer [primary key, increment]
+  zone_name varchar(100) [unique, not null, note: 'Paint, Mid-Range, Corner 3, etc.']
+  description text
+  min_distance_ft integer [note: 'Distance from basket']
+  max_distance_ft integer
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+Table player_shooting {
+  id integer [primary key, increment]
+  player_id integer [not null, ref: > player.id]
+  season_id integer [not null, ref: > season.id]
+  zone_id integer [not null, ref: > shooting_zones.id]
+  shots_attempted integer [default: 0]
+  shots_made integer [default: 0]
+  shooting_percentage decimal(5,3)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (player_id, season_id, zone_id) [unique]
+  }
+}
+
+Table injury_report {
+  id integer [primary key, increment]
+  player_id integer [not null, ref: > player.id]
+  injury_type varchar(255) [not null]
+  injury_date date [not null]
+  return_date date
+  games_missed integer [default: 0]
+  status varchar(50) [note: 'Out, Day-to-Day, Questionable, Probable']
+  description text
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+}
+
+// ==========================================
+// LAYER C: USER_DATA (App User Interactions)
+// ==========================================
+
+Table app_user {
+  id integer [primary key, increment]
+  username varchar(100) [unique, not null]
+  email varchar(255) [unique, not null]
+  password_hash varchar(255) [not null]
+  first_name varchar(100)
+  last_name varchar(100)
+  is_active boolean [default: true]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  last_login timestamp
+}
+
+Table user_favorites_players {
+  id integer [primary key, increment]
+  user_id integer [not null, ref: > app_user.id]
+  player_id integer [not null, ref: > player.id]
+  added_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (user_id, player_id) [unique]
+  }
+}
+
+Table user_favorites_teams {
+  id integer [primary key, increment]
+  user_id integer [not null, ref: > app_user.id]
+  team_id integer [not null, ref: > team.id]
+  added_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (user_id, team_id) [unique]
+  }
+}
+
+Table user_notes {
+  id integer [primary key, increment]
+  user_id integer [not null, ref: > app_user.id]
+  player_id integer [ref: > player.id]
+  team_id integer [ref: > team.id]
+  note_title varchar(255)
+  note_content text [not null]
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'Must reference at least one: player_id OR team_id'
+}
+
+Table user_comparisons {
+  id integer [primary key, increment]
+  user_id integer [not null, ref: > app_user.id]
+  player_1_id integer [not null, ref: > player.id]
+  player_2_id integer [not null, ref: > player.id]
+  comparison_name varchar(255)
+  notes text
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  Note: 'player_1_id and player_2_id must be different'
+}
+
+// ==========================================
+// LAYER D: MART (Analytics Summary Tables)
+// ==========================================
+
+Table leaderboard_pts {
+  id integer [primary key, increment]
+  player_id integer [not null, ref: > player.id]
+  season_id integer [not null, ref: > season.id]
+  rank integer [not null]
+  points_per_game decimal(10,2) [not null]
+  games_played integer
+  total_points integer
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (player_id, season_id) [unique]
+  }
+}
+
+Table leaderboard_ast {
+  id integer [primary key, increment]
+  player_id integer [not null, ref: > player.id]
+  season_id integer [not null, ref: > season.id]
+  rank integer [not null]
+  assists_per_game decimal(10,2) [not null]
+  games_played integer
+  total_assists integer
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (player_id, season_id) [unique]
+  }
+}
+
+Table leaderboard_efficiency {
+  id integer [primary key, increment]
+  player_id integer [not null, ref: > player.id]
+  season_id integer [not null, ref: > season.id]
+  rank integer [not null]
+  efficiency_rating decimal(10,2) [not null]
+  games_played integer
+  minutes_played decimal(10,2)
+  updated_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    (player_id, season_id) [unique]
+  }
+}
