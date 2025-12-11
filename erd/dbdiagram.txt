@@ -1,6 +1,6 @@
-// CourtVision ERD - 20 Tables
+// CourtVision ERD - 22 Tables
 // Use this at dbdiagram.io to visualize the database schema
-// Checkpoint 2 - NBA Analytics Application
+// Final Project - NBA Analytics Application with Audit Logging and Game Tracking
 
 // ==========================================
 // LAYER A: NBA_RAW (Imported Kaggle Dataset)
@@ -294,5 +294,48 @@ Table leaderboard_efficiency {
   
   indexes {
     (player_id, season_id) [unique]
+  }
+}
+
+// ==========================================
+// LAYER E: AUDIT & GAMES (Tracking & Logging)
+// ==========================================
+
+Table audit_log {
+  id integer [primary key, increment]
+  table_name varchar(100) [not null, note: 'Table that was modified']
+  operation varchar(20) [not null, note: 'INSERT, UPDATE, or DELETE']
+  record_id integer [note: 'ID of the affected record']
+  user_id integer [ref: > app_user.id, note: 'User who made the change']
+  old_values jsonb [note: 'Previous values (for UPDATE/DELETE)']
+  new_values jsonb [note: 'New values (for INSERT/UPDATE)']
+  changed_at timestamp [default: `CURRENT_TIMESTAMP`]
+  ip_address varchar(50)
+  user_agent text
+  
+  indexes {
+    (table_name, changed_at)
+    (user_id, changed_at)
+  }
+}
+
+Table game {
+  id integer [primary key, increment]
+  game_id varchar(50) [unique, not null, note: 'External game ID from dataset']
+  game_date_time timestamp [not null]
+  home_team_id integer [ref: > team.id]
+  away_team_id integer [ref: > team.id]
+  home_score integer [default: 0]
+  away_score integer [default: 0]
+  winner_team_id integer [ref: > team.id]
+  game_type varchar(50) [note: 'regular, playoff, in-season-knockout']
+  attendance integer
+  game_label varchar(255)
+  game_sublabel varchar(255)
+  created_at timestamp [default: `CURRENT_TIMESTAMP`]
+  
+  indexes {
+    game_date_time
+    (home_team_id, away_team_id)
   }
 }

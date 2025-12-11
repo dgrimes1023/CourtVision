@@ -135,9 +135,10 @@ export default function UpdatePlayer() {
           <div className="nav-links">
             <Link href="/" className="nav-link">Dashboard</Link>
             <Link href="/players" className="nav-link">Players</Link>
-            <Link href="/add-player" className="nav-link">Add Player</Link>
-            <Link href="/update-player" className="nav-link">Update Player</Link>
-            <Link href="/delete-player" className="nav-link">Delete Player</Link>
+            <Link href="/games" className="nav-link">Games</Link>
+            <Link href="/compare-players" className="nav-link">Compare Players</Link>
+            <Link href="/compare-teams" className="nav-link">Compare Teams</Link>
+            <Link href="/visualize" className="nav-link">Visualize</Link>
           </div>
         </div>
       </nav>

@@ -52,9 +52,10 @@ export default function Players() {
           <div className="nav-links">
             <Link href="/" className="nav-link">Dashboard</Link>
             <Link href="/players" className="nav-link">Players</Link>
-            <Link href="/add-player" className="nav-link">Add Player</Link>
-            <Link href="/update-player" className="nav-link">Update Player</Link>
-            <Link href="/delete-player" className="nav-link">Delete Player</Link>
+            <Link href="/games" className="nav-link">Games</Link>
+            <Link href="/compare-players" className="nav-link">Compare Players</Link>
+            <Link href="/compare-teams" className="nav-link">Compare Teams</Link>
+            <Link href="/visualize" className="nav-link">Visualize</Link>
           </div>
         </div>
       </nav>
@@ -107,9 +108,17 @@ export default function Players() {
             <h2 style={{ fontSize: '20px', fontWeight: 'bold' }}>
               All Players ({players.length})
             </h2>
-            <Link href="/add-player">
-              <button className="btn btn-primary">Add New Player</button>
-            </Link>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Link href="/add-player">
+                <button className="btn btn-primary">Add New Player</button>
+              </Link>
+              <Link href="/update-player">
+                <button className="btn btn-secondary">Update Player</button>
+              </Link>
+              <Link href="/delete-player">
+                <button className="btn btn-danger">Delete Player</button>
+              </Link>
+            </div>
           </div>
 
           {loading ? (

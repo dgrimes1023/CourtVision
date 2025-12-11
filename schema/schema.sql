@@ -289,6 +289,41 @@ CREATE TABLE leaderboard_efficiency (
     UNIQUE(player_id, season_id)
 );
 
+-- ==========================================
+-- LAYER E: AUDIT (Tracking & Logging)
+-- ==========================================
+
+-- Audit log for tracking important database operations
+CREATE TABLE audit_log (
+    id SERIAL PRIMARY KEY,
+    table_name VARCHAR(100) NOT NULL,
+    operation VARCHAR(20) NOT NULL, -- INSERT, UPDATE, DELETE
+    record_id INTEGER,
+    user_id INTEGER REFERENCES app_user(id),
+    old_values JSONB,
+    new_values JSONB,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ip_address VARCHAR(50),
+    user_agent TEXT
+);
+
+-- Game tracking (from Games.csv dataset)
+CREATE TABLE game (
+    id SERIAL PRIMARY KEY,
+    game_id VARCHAR(50) UNIQUE NOT NULL,
+    game_date_time TIMESTAMP NOT NULL,
+    home_team_id INTEGER REFERENCES team(id),
+    away_team_id INTEGER REFERENCES team(id),
+    home_score INTEGER DEFAULT 0,
+    away_score INTEGER DEFAULT 0,
+    winner_team_id INTEGER REFERENCES team(id),
+    game_type VARCHAR(50), -- regular, playoff, in-season-knockout
+    attendance INTEGER,
+    game_label VARCHAR(255),
+    game_sublabel VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better query performance
 CREATE INDEX idx_player_name ON player(player_name);
 CREATE INDEX idx_team_abbr ON team(abbreviation);
@@ -301,6 +336,10 @@ CREATE INDEX idx_user_notes_user ON user_notes(user_id);
 CREATE INDEX idx_leaderboard_pts_season ON leaderboard_pts(season_id, rank);
 CREATE INDEX idx_leaderboard_ast_season ON leaderboard_ast(season_id, rank);
 CREATE INDEX idx_leaderboard_efficiency_season ON leaderboard_efficiency(season_id, rank);
+CREATE INDEX idx_audit_log_table ON audit_log(table_name, changed_at);
+CREATE INDEX idx_audit_log_user ON audit_log(user_id, changed_at);
+CREATE INDEX idx_game_date ON game(game_date_time);
+CREATE INDEX idx_game_teams ON game(home_team_id, away_team_id);
 
 -- Comments
 COMMENT ON TABLE players_raw IS 'Raw player data imported from Kaggle NBA dataset';
@@ -323,3 +362,5 @@ COMMENT ON TABLE user_comparisons IS 'User-created player comparisons';
 COMMENT ON TABLE leaderboard_pts IS 'Points per game leaderboard (materialized summary)';
 COMMENT ON TABLE leaderboard_ast IS 'Assists per game leaderboard (materialized summary)';
 COMMENT ON TABLE leaderboard_efficiency IS 'Player efficiency leaderboard (materialized summary)';
+COMMENT ON TABLE audit_log IS 'Audit trail for tracking database operations';
+COMMENT ON TABLE game IS 'Game records from NBA games dataset';

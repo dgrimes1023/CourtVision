@@ -331,6 +331,170 @@ async def get_players_by_position(position: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch players: {str(e)}")
 
+@app.get("/leaderboard/rebounds")
+async def get_rebounds_leaderboard(
+    season_id: int = Query(1, description="Season ID"),
+    limit: int = Query(10, ge=1, le=50, description="Number of results")
+):
+    """Get rebounds per game leaderboard"""
+    try:
+        leaderboard = db.execute_function("get_top_rebounds", (season_id, limit))
+        return {"leaderboard": leaderboard, "count": len(leaderboard)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch leaderboard: {str(e)}")
+
+@app.get("/leaderboard/steals")
+async def get_steals_leaderboard(
+    season_id: int = Query(1, description="Season ID"),
+    limit: int = Query(10, ge=1, le=50, description="Number of results")
+):
+    """Get steals per game leaderboard"""
+    try:
+        leaderboard = db.execute_function("get_top_steals", (season_id, limit))
+        return {"leaderboard": leaderboard, "count": len(leaderboard)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch leaderboard: {str(e)}")
+
+@app.get("/player/{player_id}/stats")
+async def get_player_stats(
+    player_id: int,
+    season_id: int = Query(1, description="Season ID")
+):
+    """Get detailed statistics for a player"""
+    try:
+        stats = db.execute_function("get_player_stats", (player_id, season_id))
+        if not stats:
+            raise HTTPException(status_code=404, detail="Player statistics not found")
+        return {"player_id": player_id, "stats": stats[0] if stats else {}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch player stats: {str(e)}")
+
+@app.get("/compare/players")
+async def compare_players(
+    player1_id: int = Query(..., description="First player ID"),
+    player2_id: int = Query(..., description="Second player ID"),
+    season_id: int = Query(1, description="Season ID")
+):
+    """Compare two players' statistics"""
+    try:
+        player1_stats = db.execute_function("get_player_stats", (player1_id, season_id))
+        player2_stats = db.execute_function("get_player_stats", (player2_id, season_id))
+        
+        return {
+            "player1": player1_stats[0] if player1_stats else None,
+            "player2": player2_stats[0] if player2_stats else None,
+            "season_id": season_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to compare players: {str(e)}")
+
+@app.get("/compare/teams")
+async def compare_teams(
+    team1_id: int = Query(..., description="First team ID"),
+    team2_id: int = Query(..., description="Second team ID"),
+    season_id: int = Query(1, description="Season ID")
+):
+    """Compare two teams' statistics"""
+    try:
+        comparison = db.execute_function("compare_teams", (team1_id, team2_id, season_id))
+        if not comparison:
+            raise HTTPException(status_code=404, detail="Team statistics not found")
+        return comparison[0] if comparison else {}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to compare teams: {str(e)}")
+
+@app.get("/leaderboard/team/wins")
+async def get_team_most_wins(
+    limit: int = Query(10, ge=1, le=50, description="Number of results")
+):
+    """Get teams by most wins ever (all-time)"""
+    try:
+        leaderboard = db.execute_function("get_team_most_wins", (limit,))
+        return {"leaderboard": leaderboard, "count": len(leaderboard)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch leaderboard: {str(e)}")
+
+@app.get("/leaderboard/team/avg-wins")
+async def get_team_avg_wins(
+    limit: int = Query(10, ge=1, le=50, description="Number of results")
+):
+    """Get teams by average wins per season"""
+    try:
+        leaderboard = db.execute_function("get_team_avg_wins_per_season", (limit,))
+        return {"leaderboard": leaderboard, "count": len(leaderboard)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch leaderboard: {str(e)}")
+
+@app.get("/leaderboard/team/points")
+async def get_team_points_per_game(
+    limit: int = Query(10, ge=1, le=50, description="Number of results")
+):
+    """Get teams by points per game"""
+    try:
+        leaderboard = db.execute_function("get_team_points_per_game", (limit,))
+        return {"leaderboard": leaderboard, "count": len(leaderboard)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch leaderboard: {str(e)}")
+
+# ==========================================
+# GAME ENDPOINTS
+# ==========================================
+
+@app.get("/games")
+async def get_recent_games(limit: int = Query(20, ge=1, le=100, description="Number of games")):
+    """Get recent games"""
+    try:
+        games = db.execute_function("get_recent_games", (limit,))
+        return {"games": games, "count": len(games)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch games: {str(e)}")
+
+@app.get("/games/team/{team_id}")
+async def get_team_games(
+    team_id: int,
+    limit: int = Query(20, ge=1, le=100, description="Number of games")
+):
+    """Get games for a specific team"""
+    try:
+        games = db.execute_function("get_games_by_team", (team_id, limit))
+        return {"games": games, "count": len(games)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch team games: {str(e)}")
+
+# ==========================================
+# AUDIT LOG ENDPOINTS
+# ==========================================
+
+@app.get("/audit")
+async def get_audit_logs(
+    limit: int = Query(50, ge=1, le=200, description="Number of logs"),
+    table_name: Optional[str] = Query(None, description="Filter by table name")
+):
+    """Get audit logs"""
+    try:
+        query = """
+            SELECT id, table_name, operation, record_id, changed_at,
+                   old_values::text as old_values, new_values::text as new_values
+            FROM audit_log
+        """
+        params = []
+        
+        if table_name:
+            query += " WHERE table_name = %s"
+            params.append(table_name)
+        
+        query += " ORDER BY changed_at DESC LIMIT %s"
+        params.append(limit)
+        
+        logs = db.execute_query(query, tuple(params))
+        return {"logs": logs, "count": len(logs)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch audit logs: {str(e)}")
+
 # ==========================================
 # MAIN
 # ==========================================

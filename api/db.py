@@ -10,6 +10,10 @@ from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 import os
 from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class Database:
     """Database connection and query execution helper class"""

@@ -390,16 +390,24 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
+    WITH aggregated_stats AS (
+        SELECT 
+            pss.player_id,
+            MAX(pss.points) as max_points,
+            MAX(pss.games_played) as max_games
+        FROM player_season_stats pss
+        WHERE pss.season_id = p_season_id AND pss.games_played > 0
+        GROUP BY pss.player_id
+    )
     SELECT 
-        ROW_NUMBER() OVER (ORDER BY pss.points DESC)::INTEGER as rank,
+        ROW_NUMBER() OVER (ORDER BY a.max_points DESC)::INTEGER as rank,
         p.id,
         p.player_name,
-        pss.points,
-        pss.games_played
-    FROM player_season_stats pss
-    JOIN player p ON pss.player_id = p.id
-    WHERE pss.season_id = p_season_id AND pss.games_played > 0
-    ORDER BY pss.points DESC
+        a.max_points,
+        a.max_games
+    FROM aggregated_stats a
+    JOIN player p ON a.player_id = p.id
+    ORDER BY a.max_points DESC
     LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql;
@@ -415,16 +423,90 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
+    WITH aggregated_stats AS (
+        SELECT 
+            pss.player_id,
+            MAX(pss.assists) as max_assists,
+            MAX(pss.games_played) as max_games
+        FROM player_season_stats pss
+        WHERE pss.season_id = p_season_id AND pss.games_played > 0
+        GROUP BY pss.player_id
+    )
     SELECT 
-        ROW_NUMBER() OVER (ORDER BY pss.assists DESC)::INTEGER as rank,
+        ROW_NUMBER() OVER (ORDER BY a.max_assists DESC)::INTEGER as rank,
         p.id,
         p.player_name,
-        pss.assists,
-        pss.games_played
-    FROM player_season_stats pss
-    JOIN player p ON pss.player_id = p.id
-    WHERE pss.season_id = p_season_id AND pss.games_played > 0
-    ORDER BY pss.assists DESC
+        a.max_assists,
+        a.max_games
+    FROM aggregated_stats a
+    JOIN player p ON a.player_id = p.id
+    ORDER BY a.max_assists DESC
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get top rebounds leaders by season
+CREATE OR REPLACE FUNCTION get_top_rebounds(p_season_id INTEGER, p_limit INTEGER DEFAULT 10)
+RETURNS TABLE (
+    rank INTEGER,
+    player_id INTEGER,
+    player_name VARCHAR(255),
+    rebounds_per_game DECIMAL(10, 2),
+    games_played INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH aggregated_stats AS (
+        SELECT 
+            pss.player_id,
+            MAX(pss.rebounds) as max_rebounds,
+            MAX(pss.games_played) as max_games
+        FROM player_season_stats pss
+        WHERE pss.season_id = p_season_id AND pss.games_played > 0
+        GROUP BY pss.player_id
+    )
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY a.max_rebounds DESC)::INTEGER as rank,
+        p.id,
+        p.player_name,
+        a.max_rebounds,
+        a.max_games
+    FROM aggregated_stats a
+    JOIN player p ON a.player_id = p.id
+    ORDER BY a.max_rebounds DESC
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get top steals leaders by season
+CREATE OR REPLACE FUNCTION get_top_steals(p_season_id INTEGER, p_limit INTEGER DEFAULT 10)
+RETURNS TABLE (
+    rank INTEGER,
+    player_id INTEGER,
+    player_name VARCHAR(255),
+    steals_per_game DECIMAL(10, 2),
+    games_played INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH aggregated_stats AS (
+        SELECT 
+            pss.player_id,
+            MAX(pss.steals) as max_steals,
+            MAX(pss.games_played) as max_games
+        FROM player_season_stats pss
+        WHERE pss.season_id = p_season_id AND pss.games_played > 0
+        GROUP BY pss.player_id
+    )
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY a.max_steals DESC)::INTEGER as rank,
+        p.id,
+        p.player_name,
+        a.max_steals,
+        a.max_games
+    FROM aggregated_stats a
+    JOIN player p ON a.player_id = p.id
+    ORDER BY a.max_steals DESC
     LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql;
@@ -526,6 +608,275 @@ BEGIN
     JOIN player p ON l.player_id = p.id
     WHERE l.season_id = p_season_id
     ORDER BY l.rank
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get efficiency leaderboard
+CREATE OR REPLACE FUNCTION get_efficiency_leaderboard(p_season_id INTEGER, p_limit INTEGER DEFAULT 10)
+RETURNS TABLE (
+    rank INTEGER,
+    player_name VARCHAR(255),
+    efficiency_rating DECIMAL(10, 2),
+    games_played INTEGER,
+    minutes_played DECIMAL(10, 2)
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY am.player_efficiency_rating DESC NULLS LAST)::INTEGER as rank,
+        p.player_name,
+        am.player_efficiency_rating,
+        pss.games_played,
+        pss.minutes_played
+    FROM advanced_metrics am
+    JOIN player p ON am.player_id = p.id
+    JOIN player_season_stats pss ON am.player_id = pss.player_id AND am.season_id = pss.season_id
+    WHERE am.season_id = p_season_id AND pss.games_played > 0
+    ORDER BY am.player_efficiency_rating DESC NULLS LAST
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ==========================================
+-- AUDIT LOG TRIGGER FUNCTIONS
+-- ==========================================
+
+-- Function to log player changes
+CREATE OR REPLACE FUNCTION log_player_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO audit_log (table_name, operation, record_id, new_values)
+        VALUES ('player', 'INSERT', NEW.id, row_to_json(NEW)::jsonb);
+    ELSIF TG_OP = 'UPDATE' THEN
+        INSERT INTO audit_log (table_name, operation, record_id, old_values, new_values)
+        VALUES ('player', 'UPDATE', NEW.id, row_to_json(OLD)::jsonb, row_to_json(NEW)::jsonb);
+    ELSIF TG_OP = 'DELETE' THEN
+        INSERT INTO audit_log (table_name, operation, record_id, old_values)
+        VALUES ('player', 'DELETE', OLD.id, row_to_json(OLD)::jsonb);
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for player audit
+CREATE TRIGGER player_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON player
+FOR EACH ROW EXECUTE FUNCTION log_player_changes();
+
+-- Function to log team changes
+CREATE OR REPLACE FUNCTION log_team_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO audit_log (table_name, operation, record_id, new_values)
+        VALUES ('team', 'INSERT', NEW.id, row_to_json(NEW)::jsonb);
+    ELSIF TG_OP = 'UPDATE' THEN
+        INSERT INTO audit_log (table_name, operation, record_id, old_values, new_values)
+        VALUES ('team', 'UPDATE', NEW.id, row_to_json(OLD)::jsonb, row_to_json(NEW)::jsonb);
+    ELSIF TG_OP = 'DELETE' THEN
+        INSERT INTO audit_log (table_name, operation, record_id, old_values)
+        VALUES ('team', 'DELETE', OLD.id, row_to_json(OLD)::jsonb);
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for team audit
+CREATE TRIGGER team_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON team
+FOR EACH ROW EXECUTE FUNCTION log_team_changes();
+
+-- ==========================================
+-- TEAM COMPARISON & LEADERBOARDS
+-- ==========================================
+
+-- Compare two teams
+CREATE OR REPLACE FUNCTION compare_teams(
+    p_team1_id INTEGER,
+    p_team2_id INTEGER,
+    p_season_id INTEGER
+)
+RETURNS TABLE (
+    team1_name VARCHAR(255),
+    team2_name VARCHAR(255),
+    team1_games INTEGER,
+    team2_games INTEGER,
+    team1_points DECIMAL(10, 2),
+    team2_points DECIMAL(10, 2),
+    team1_assists DECIMAL(10, 2),
+    team2_assists DECIMAL(10, 2),
+    team1_rebounds DECIMAL(10, 2),
+    team2_rebounds DECIMAL(10, 2),
+    team1_steals DECIMAL(10, 2),
+    team2_steals DECIMAL(10, 2),
+    team1_blocks DECIMAL(10, 2),
+    team2_blocks DECIMAL(10, 2)
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        t1.team_name,
+        t2.team_name,
+        tss1.games_played,
+        tss2.games_played,
+        tss1.points,
+        tss2.points,
+        tss1.assists,
+        tss2.assists,
+        tss1.rebounds,
+        tss2.rebounds,
+        tss1.steals,
+        tss2.steals,
+        tss1.blocks,
+        tss2.blocks
+    FROM team t1
+    CROSS JOIN team t2
+    LEFT JOIN team_season_stats tss1 ON t1.id = tss1.team_id AND tss1.season_id = p_season_id
+    LEFT JOIN team_season_stats tss2 ON t2.id = tss2.team_id AND tss2.season_id = p_season_id
+    WHERE t1.id = p_team1_id AND t2.id = p_team2_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get team points leaderboard
+CREATE OR REPLACE FUNCTION get_team_points_leaderboard(p_season_id INTEGER, p_limit INTEGER DEFAULT 10)
+RETURNS TABLE (
+    rank INTEGER,
+    team_id INTEGER,
+    team_name VARCHAR(255),
+    points_per_game DECIMAL(10, 2),
+    games_played INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY tss.points DESC)::INTEGER as rank,
+        t.id,
+        t.team_name,
+        tss.points,
+        tss.games_played
+    FROM team_season_stats tss
+    JOIN team t ON tss.team_id = t.id
+    WHERE tss.season_id = p_season_id AND tss.games_played > 0
+    ORDER BY tss.points DESC
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get team assists leaderboard
+CREATE OR REPLACE FUNCTION get_team_assists_leaderboard(p_season_id INTEGER, p_limit INTEGER DEFAULT 10)
+RETURNS TABLE (
+    rank INTEGER,
+    team_id INTEGER,
+    team_name VARCHAR(255),
+    assists_per_game DECIMAL(10, 2),
+    games_played INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY tss.assists DESC)::INTEGER as rank,
+        t.id,
+        t.team_name,
+        tss.assists,
+        tss.games_played
+    FROM team_season_stats tss
+    JOIN team t ON tss.team_id = t.id
+    WHERE tss.season_id = p_season_id AND tss.games_played > 0
+    ORDER BY tss.assists DESC
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get team rebounds leaderboard
+CREATE OR REPLACE FUNCTION get_team_rebounds_leaderboard(p_season_id INTEGER, p_limit INTEGER DEFAULT 10)
+RETURNS TABLE (
+    rank INTEGER,
+    team_id INTEGER,
+    team_name VARCHAR(255),
+    rebounds_per_game DECIMAL(10, 2),
+    games_played INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY tss.rebounds DESC)::INTEGER as rank,
+        t.id,
+        t.team_name,
+        tss.rebounds,
+        tss.games_played
+    FROM team_season_stats tss
+    JOIN team t ON tss.team_id = t.id
+    WHERE tss.season_id = p_season_id AND tss.games_played > 0
+    ORDER BY tss.rebounds DESC
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ==========================================
+-- GAME FUNCTIONS
+-- ==========================================
+
+-- Get recent games
+CREATE OR REPLACE FUNCTION get_recent_games(p_limit INTEGER DEFAULT 10)
+RETURNS TABLE (
+    id INTEGER,
+    game_id VARCHAR(50),
+    game_date_time TIMESTAMP,
+    home_team VARCHAR(255),
+    away_team VARCHAR(255),
+    home_score INTEGER,
+    away_score INTEGER,
+    game_type VARCHAR(50)
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        g.id,
+        g.game_id,
+        g.game_date_time,
+        t1.team_name as home_team,
+        t2.team_name as away_team,
+        g.home_score,
+        g.away_score,
+        g.game_type
+    FROM game g
+    LEFT JOIN team t1 ON g.home_team_id = t1.id
+    LEFT JOIN team t2 ON g.away_team_id = t2.id
+    ORDER BY g.game_date_time DESC
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get games by team
+CREATE OR REPLACE FUNCTION get_games_by_team(p_team_id INTEGER, p_limit INTEGER DEFAULT 20)
+RETURNS TABLE (
+    id INTEGER,
+    game_id VARCHAR(50),
+    game_date_time TIMESTAMP,
+    opponent_team VARCHAR(255),
+    is_home BOOLEAN,
+    team_score INTEGER,
+    opponent_score INTEGER,
+    won BOOLEAN
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        g.id,
+        g.game_id,
+        g.game_date_time,
+        CASE WHEN g.home_team_id = p_team_id THEN t2.team_name ELSE t1.team_name END as opponent_team,
+        g.home_team_id = p_team_id as is_home,
+        CASE WHEN g.home_team_id = p_team_id THEN g.home_score ELSE g.away_score END as team_score,
+        CASE WHEN g.home_team_id = p_team_id THEN g.away_score ELSE g.home_score END as opponent_score,
+        g.winner_team_id = p_team_id as won
+    FROM game g
+    LEFT JOIN team t1 ON g.home_team_id = t1.id
+    LEFT JOIN team t2 ON g.away_team_id = t2.id
+    WHERE g.home_team_id = p_team_id OR g.away_team_id = p_team_id
+    ORDER BY g.game_date_time DESC
     LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql;
