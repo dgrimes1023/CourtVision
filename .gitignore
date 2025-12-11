@@ -3,6 +3,9 @@ node_modules/
 frontend/node_modules/
 api/venv/
 
+# Large data files (loaded into database)
+datasets/
+
 # Next.js
 frontend/.next/
 frontend/out/
